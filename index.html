@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Citizen Science Task</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --maroon: #800000; --bg: #F7F7F5; --text: #333; --line: #d9d9d4; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: Arial, Helvetica, sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: #fff; border-bottom: 1px solid var(--line); font-size: 17px; }
+  header #title { font-weight: 700; }
+  #timer { font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 6px; }
+  main { max-width: 860px; margin: 20px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 20px 22px; text-align: center; }
+  .instr { text-align: left; line-height: 1.55; font-size: 17px; }
+  .instr h2 { margin: 0 0 10px; font-size: 20px; }
+  #banner { display: none; margin-bottom: 10px; padding: 8px 12px; border-radius: 6px; background: #f1ebe9; color: var(--maroon); font-size: 15px; text-align: center; }
+  .imgbox { height: 52vh; min-height: 260px; display: flex; align-items: center; justify-content: center; }
+  img.stim { max-width: 100%; max-height: 52vh; border: 1px solid var(--line); }
+  .ex { display: inline-block; margin: 10px 8px 0; font-size: 14px; vertical-align: top; }
+  .ex img { height: 130px; border: 1px solid var(--line); display: block; margin-bottom: 4px; }
+  .prompt { font-size: 18px; font-weight: 600; margin: 16px 0 10px; }
+  .choices { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .choices.two { grid-template-columns: 1fr 1fr; max-width: 520px; margin: 0 auto; }
+  @media (max-width: 640px) { .choices { grid-template-columns: repeat(2, 1fr); } }
+  button { font: inherit; font-size: 16px; padding: 11px 14px; border: 1px solid #999; border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
+  .choices button:hover { border-color: var(--maroon); color: var(--maroon); }
+  button.primary { background: var(--maroon); border-color: var(--maroon); color: #fff; min-width: 140px; margin-top: 14px; }
+  button.primary:hover { background: #660000; color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  .wrap { position: relative; display: inline-block; line-height: 0; }
+  .dot { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(128,0,0,.85); border: 2px solid #fff; pointer-events: none; }
+  input[type=number] { font: inherit; font-size: 22px; padding: 8px; width: 130px; text-align: center; border: 1px solid #999; border-radius: 6px; }
+  .fb { font-size: 18px; margin: 18px 0 4px; }
+  footer { max-width: 860px; margin: 8px auto 24px; padding: 0 16px; color: #666; font-size: 15px; text-align: left; visibility: hidden; }
+</style>
+</head>
+<body>
+<header><span id="title">Citizen Science Task</span><span>Time remaining<span id="timer"></span></span></header>
+<main>
+  <div id="banner"></div>
+  <div id="stage" class="card">Loading…</div>
+</main>
+<footer id="footer">Items completed: <span id="count">0</span></footer>
+
+<script src="tasks.js"></script>
+<script>
+// ---------------- setup ----------------
+const P = new URLSearchParams(location.search);
+const taskId = P.get("task") || "wildlife";                    // wildlife | galaxy | plant | penguin
+const DURATION = (parseInt(P.get("duration")) || 120) * 1000;  // timed work period in seconds
+const PRACTICE = P.get("practice") !== "0";                    // one untimed, unscored practice item
+const DEBUG = P.get("debug") === "1";
+const T = window.TASKS[taskId];
+const stage = document.getElementById("stage");
+if (!T) { stage.textContent = "Unknown task: " + taskId; throw new Error("unknown task"); }
+
+let deadline = null, finished = false, queue = [], pass = 0, qi = 0, ITEMS = [], practiceItem = null;
+const log = [];
+const fmt = s => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+document.getElementById("timer").textContent = fmt(DURATION / 1000);
+
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function nextItem() {
+  if (qi >= queue.length) { queue = shuffle(ITEMS); qi = 0; pass++; }
+  return queue[qi++];
+}
+function el(tag, props = {}, kids = []) {
+  const e = Object.assign(document.createElement(tag), props);
+  (Array.isArray(kids) ? kids : [kids]).forEach(k => e.append(k));
+  return e;
+}
+function img(file, cls = "stim", dir = T.dir) { return el("img", { src: dir + file, className: cls, draggable: false }); }
+const box = child => el("div", { className: "imgbox" }, child);
+function banner(text) { const b = document.getElementById("banner"); b.style.display = text ? "block" : "none"; b.textContent = text || ""; }
+
+// minimal CSV parser (handles quoted fields such as "274,184")
+function parseCSV(text) {
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); f = ""; if (row.length > 1 || row[0] !== "") rows.push(row); row = []; }
+    else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  const h = rows.shift();
+  return rows.map(r => Object.fromEntries(h.map((k, i) => [k, r[i]])));
+}
+const loadCSV = path => fetch(path).then(r => { if (!r.ok) throw new Error(path + " (" + r.status + ")"); return r.text(); }).then(parseCSV);
+
+// ---------------- scoring: returns true/false ----------------
+function score(item, resp) {
+  if (taskId === "plant") {
+    const k = item.key, dx = resp.x * k.w - k.x, dy = resp.y * k.h - k.y;
+    return Math.sqrt(dx * dx + dy * dy) <= k.r;
+  }
+  return resp.answer === item.key;
+}
+function answerText(item) {
+  if (taskId === "wildlife") return (T.species.find(s => s[0] === item.key) || [0, item.key])[1];
+  if (taskId === "galaxy") return item.key ? "Yes, it is a disc" : "No, it is not a disc";
+  if (taskId === "penguin") return String(item.key);
+  return "";
+}
+
+// ---------------- renderers: each calls submit({answer: ...}) ----------------
+const R = {};
+
+R.wildlife = (item, submit) => {
+  stage.replaceChildren(box(img(item.file)),
+    el("div", { className: "prompt", textContent: "Which animal species is shown?" }),
+    el("div", { className: "choices" }, T.species.map(([val, label]) => el("button", { textContent: label, onclick: () => submit({ answer: val }) }))));
+};
+
+R.galaxy = (item, submit) => {
+  stage.replaceChildren(box(img(item.file)),
+    el("div", { className: "prompt", textContent: "Is this galaxy a disc?" }),
+    el("div", { className: "choices two" }, [
+      el("button", { textContent: "Yes, it has a disc", onclick: () => submit({ answer: true }) }),
+      el("button", { textContent: "No, it does not", onclick: () => submit({ answer: false }) })]));
+};
+
+R.plant = (item, submit) => {
+  let pt = null;
+  const wrap = el("div", { className: "wrap" });
+  wrap.append(img(item.file));
+  const im = wrap.firstChild;
+  const go = el("button", { className: "primary", textContent: "Submit", disabled: true, onclick: () => submit({ x: +pt[0].toFixed(4), y: +pt[1].toFixed(4), answer: pt }) });
+  im.onclick = e => {
+    const r = im.getBoundingClientRect();
+    pt = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+    wrap.querySelector(".dot")?.remove();
+    wrap.append(el("div", { className: "dot", style: `left:${pt[0] * 100}%;top:${pt[1] * 100}%` }));
+    go.disabled = false;
+  };
+  stage.replaceChildren(box(wrap), el("div", { className: "prompt", textContent: "Click near the center of the highlighted leaf." }), go);
+};
+
+R.penguin = (item, submit) => {
+  const inp = el("input", { type: "number", min: 0, step: 1, inputMode: "numeric" });
+  const go = el("button", { className: "primary", textContent: "Submit", disabled: true, onclick: () => submit({ answer: parseInt(inp.value) }) });
+  inp.oninput = () => { go.disabled = !/^\d+$/.test(inp.value); };
+  inp.onkeydown = e => { if (e.key === "Enter" && !go.disabled) go.click(); };
+  stage.replaceChildren(box(img(item.file)),
+    el("div", { className: "prompt", textContent: "How many penguins are visible in this image?" }),
+    el("div", {}, [inp]), go);
+  inp.focus();
+};
+
+// ---------------- practice (untimed, unscored) ----------------
+function runPractice() {
+  banner("Practice item: not timed and not scored");
+  R[taskId](practiceItem, resp => {
+    const ok = score(practiceItem, resp);
+    const msg = ok ? "Correct." : (taskId === "plant" ? "Not quite. The target is the circled leaf." : "Not quite. The correct answer was: " + answerText(practiceItem) + ".");
+    stage.replaceChildren(
+      el("div", { className: "fb", textContent: msg }),
+      el("p", { textContent: `The timed task starts when you click below. You will have ${DURATION / 1000} seconds. There is no feedback during the timed task.` }),
+      el("button", { className: "primary", textContent: "Start timed task", onclick: begin }));
+  });
+}
+
+// ---------------- timed task ----------------
+function show() {
+  if (finished) return;
+  const item = nextItem(), myPass = pass, t0 = Date.now();
+  const nxt = queue[qi] || ITEMS[0]; new Image().src = T.dir + nxt.file;     // light preload
+  R[taskId](item, resp => {
+    if (finished || Date.now() >= deadline) return;
+    log.push({ item: item.file, pass: myPass, rt_ms: Date.now() - t0, response: resp, correct: score(item, resp) });
+    document.getElementById("count").textContent = log.length;
+    show();
+  });
+}
+
+function begin() {
+  banner("");
+  document.getElementById("footer").style.visibility = "visible";
+  deadline = Date.now() + DURATION;
+  queue = shuffle(ITEMS);
+  const tick = setInterval(() => {
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    document.getElementById("timer").textContent = fmt(left);
+    if (left <= 0) { clearInterval(tick); finish(); }
+  }, 200);
+  show();
+}
+
+function finish() {
+  if (finished) return; finished = true;
+  const first = log.filter(l => l.pass === 0);                 // only the first pass counts toward payment
+  const nCorrect = first.filter(l => l.correct).length;
+  const summary = {
+    type: "task_result", task: taskId, duration_s: DURATION / 1000,
+    n_completed_total: log.length,
+    n_first_pass: first.length,
+    n_first_pass_correct: nCorrect,
+    accuracy_first_pass: first.length ? nCorrect / first.length : null,
+    repeated_items: log.length - first.length,
+    log: JSON.stringify(log)
+  };
+  window.parent.postMessage(summary, "*");
+  stage.replaceChildren(el("p", { className: "prompt", textContent: "Time is up. Thank you!" }));
+  if (DEBUG) stage.append(el("pre", { style: "text-align:left;white-space:pre-wrap", textContent: JSON.stringify({ ...summary, log: log }, null, 1) }));
+}
+
+// ---------------- load data, then instruction screen ----------------
+(async function init() {
+  try {
+    const rows = await loadCSV(T.dir + T.csv);
+    ITEMS = rows.map(T.parse);
+    if (!ITEMS.length) throw new Error("no items in " + T.dir + T.csv);
+    if (PRACTICE && ITEMS.length > 1) {                          // practice item is removed from the scored pool
+      const k = Math.floor(Math.random() * ITEMS.length);
+      practiceItem = ITEMS.splice(k, 1)[0];
+    }
+    let exRows = null;
+    if (T.examplesCsv) exRows = await loadCSV(T.examplesDir + T.examplesCsv);
+
+    const kids = [el("div", { className: "instr" }, [
+      el("h2", { textContent: T.title }),
+      el("p", { textContent: T.instructions }),
+      el("p", { textContent: `You will have ${DURATION / 1000} seconds to complete as many items as you can. Your bonus depends on the accuracy of your responses.` })
+    ])];
+    if (exRows) kids.push(el("div", {}, exRows.map(r => el("div", { className: "ex" }, [img(r.image_file, "", T.examplesDir), T.exampleLabel(r)]))));
+    kids.push(el("button", { className: "primary", textContent: PRACTICE && practiceItem ? "Try a practice item" : "Start timed task", onclick: PRACTICE && practiceItem ? runPractice : begin }));
+    stage.replaceChildren(...kids);
+  } catch (err) {
+    stage.textContent = "Could not load task data: " + err.message + ". Open this page through a web server (not by double-clicking the file).";
+  }
+})();
+</script>
+</body>
+</html>
