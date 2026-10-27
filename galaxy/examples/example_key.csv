@@ -1,0 +1,5 @@
+item_id,image_file,correct_answer,source_id,source_url,disc_vote_fraction,smooth_vote_fraction,total_votes,md5,file_bytes
+galaxy_example_01,galaxy_example_01.jpg,No,J131320.52-013617.0,https://www.legacysurvey.org/viewer/jpeg-cutout?ra=198.3353766&dec=-1.6045572&pixscale=0.262&layer=ls-dr10&size=256,0.0571,0.9143,35,3fd5a4bce6b8b3f521b0025b74f82aeb,33547
+galaxy_example_02,galaxy_example_02.jpg,Yes,J140031.27+120451.8,https://www.legacysurvey.org/viewer/jpeg-cutout?ra=210.1303224&dec=12.0810827&pixscale=0.262&layer=ls-dr10&size=256,0.9487,0.0256,39,54fe85112ba1c18029e86622b435055a,32205
+galaxy_example_03,galaxy_example_03.jpg,Yes,J220357.93-010337.3,https://www.legacysurvey.org/viewer/jpeg-cutout?ra=330.9913954&dec=-1.0603775&pixscale=0.262&layer=ls-dr10&size=256,0.8958,0.0625,48,b679b0776efa4fe4b1bb10eade202a39,28086
+galaxy_example_04,galaxy_example_04.jpg,No,J162941.31+293532.8,https://www.legacysurvey.org/viewer/jpeg-cutout?ra=247.4221523&dec=29.5924850&pixscale=0.262&layer=ls-dr10&size=256,0.027,0.9459,37,917d9901442f49f0ad4dad0d42ec0ec3,28381
