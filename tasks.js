@@ -10,11 +10,11 @@ window.TASKS = {
     instructions: "Researchers use motion-activated cameras to monitor wildlife populations in protected habitats. You will view camera-trap photographs. For each photograph, identify the animal species shown by selecting from the list.",
     dir: "wildlife/",
     csv: "answer_key.csv",
-    species: [   // [value in answer_key.csv, label shown]
-      ["baboon", "Baboon"], ["dikDik", "Dik-dik"], ["eland", "Eland"], ["elephant", "Elephant"],
-      ["hippopotamus", "Hippopotamus"], ["lionFemale", "Lion"], ["mongoose", "Mongoose"],
-      ["ostrich", "Ostrich"], ["porcupine", "Porcupine"], ["topi", "Topi"]
+    species: [   // [value in answer_key.csv, label shown] -- only these 6 are offered and used
+      ["baboon", "Baboon"], ["elephant", "Elephant"], ["hippopotamus", "Hippopotamus"],
+      ["lionFemale", "Lion"], ["ostrich", "Ostrich"], ["porcupine", "Porcupine"]
     ],
+    keep: ["baboon", "elephant", "hippopotamus", "lionFemale", "ostrich", "porcupine"],   // images of other species are skipped
     parse: r => ({ file: r.image_file, key: r.correct_answer })
   },
 

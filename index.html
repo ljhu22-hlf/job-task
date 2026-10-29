@@ -42,7 +42,7 @@
   <div id="banner"></div>
   <div id="stage" class="card">Loading…</div>
 </main>
-<footer id="footer">Items completed: <span id="count">0</span></footer>
+<footer id="footer">Items completed: <span id="count">0</span><span id="demo" style="color:#800000;font-weight:700"></span></footer>
 
 <script src="tasks.js"></script>
 <script>
@@ -52,6 +52,7 @@ const taskId = P.get("task") || "wildlife";                    // wildlife | gal
 const DURATION = (parseInt(P.get("duration")) || 120) * 1000;  // timed work period in seconds
 const PRACTICE = P.get("practice") !== "0";                    // one untimed, unscored practice item
 const DEBUG = P.get("debug") === "1";
+const DEMO = P.get("demo") === "1";                            // demo only: show running score and feedback (remove for participants)
 const T = window.TASKS[taskId];
 const stage = document.getElementById("stage");
 if (!T) { stage.textContent = "Unknown task: " + taskId; throw new Error("unknown task"); }
@@ -171,8 +172,15 @@ function show() {
   const nxt = queue[qi] || ITEMS[0]; new Image().src = T.dir + nxt.file;     // light preload
   R[taskId](item, resp => {
     if (finished || Date.now() >= deadline) return;
-    log.push({ item: item.file, pass: myPass, rt_ms: Date.now() - t0, response: resp, correct: score(item, resp) });
+    const ok = score(item, resp);
+    log.push({ item: item.file, pass: myPass, rt_ms: Date.now() - t0, response: resp, correct: ok });
     document.getElementById("count").textContent = log.length;
+    if (DEMO) {
+      const nOk = log.filter(l => l.correct).length;
+      document.getElementById("demo").textContent =
+        `  |  DEMO score: ${nOk} correct of ${log.length} (${Math.round(100 * nOk / log.length)}%)  |  Last item: ` +
+        (ok ? "correct" : "incorrect" + (taskId === "plant" ? "" : " (answer: " + answerText(item) + ")"));
+    }
     show();
   });
 }
@@ -212,7 +220,7 @@ function finish() {
 (async function init() {
   try {
     const rows = await loadCSV(T.dir + T.csv);
-    ITEMS = rows.map(T.parse);
+    ITEMS = rows.map(T.parse).filter(it => !T.keep || T.keep.includes(it.key));
     if (!ITEMS.length) throw new Error("no items in " + T.dir + T.csv);
     if (PRACTICE && ITEMS.length > 1) {                          // practice item is removed from the scored pool
       const k = Math.floor(Math.random() * ITEMS.length);
